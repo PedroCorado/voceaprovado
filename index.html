@@ -154,6 +154,52 @@
         /* Hide Scrollbar for Filter UX */
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* ─── Page Transition Grid ─── */
+        #page-transition {
+            position: fixed;
+            inset: 0;
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            z-index: 9999;
+            pointer-events: none;
+            visibility: hidden;
+        }
+        .pt-block {
+            background-color: #09090b;
+            width: 100%;
+            aspect-ratio: 1;
+            opacity: 0;
+            transform: scale(0.5);
+        }
+        @media (max-width: 767px) { #page-transition { grid-template-columns: repeat(6, 1fr); } }
+        @media (max-width: 479px) { #page-transition { grid-template-columns: repeat(4, 1fr); } }
+
+        /* ─── Mobile Performance ─── */
+        @media (max-width: 768px) {
+            /* Reduz custo de backdrop-filter nos cards */
+            .ds-card {
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+            }
+            .ds-glass-pill {
+                backdrop-filter: blur(4px);
+                -webkit-backdrop-filter: blur(4px);
+            }
+            /* Pausa a animação dos blobs de fundo grandes — eles só ficam visíveis na forma estática */
+            .animate-pulse-slow {
+                animation: none !important;
+            }
+            /* Esconde apenas os blobs de glow ambiente grandes (blur-[100px]+)
+               Os glow dos cards (blur-xl / ~24px) são mantidos — eles formam a identidade visual */
+            .glow-ambient {
+                display: none !important;
+            }
+            /* Para as bolinhas ping dos cards — 30 repaints por frame */
+            .animate-ping {
+                animation: none !important;
+            }
+        }
     </style>
 </head>
 
@@ -168,8 +214,8 @@
         
         <!-- Ambient Background / Glow Effects from Design System -->
         <div class="absolute inset-0 bg-dot-pattern z-0 pointer-events-none" style="mask-image: radial-gradient(circle at center, black 40%, transparent 100%); -webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 100%);"></div>
-        <div class="absolute top-1/4 left-1/4 w-[30rem] h-[30rem] bg-primary/20 rounded-full blur-[120px] -z-10 animate-pulse-slow"></div>
-        <div class="absolute bottom-1/4 right-1/4 w-[25rem] h-[25rem] bg-green-500/20 rounded-full blur-[100px] -z-10 animate-pulse-slow" style="animation-delay: -2s;"></div>
+        <div class="glow-ambient absolute top-1/4 left-1/4 w-[30rem] h-[30rem] bg-primary/20 rounded-full blur-[120px] -z-10 animate-pulse-slow"></div>
+        <div class="glow-ambient absolute bottom-1/4 right-1/4 w-[25rem] h-[25rem] bg-green-500/20 rounded-full blur-[100px] -z-10 animate-pulse-slow" style="animation-delay: -2s;"></div>
         
         <!-- Center Content -->
         <div class="relative z-20 max-w-5xl mx-auto flex flex-col justify-center items-center text-center">
@@ -214,10 +260,10 @@
             <!-- Proof of Social -->
             <div id="hero-social" class="mt-14 flex flex-wrap items-center justify-center gap-4 text-sm font-medium text-muted-foreground">
                 <div class="flex -space-x-3">
-                    <img class="w-10 h-10 rounded-full border-2 border-background bg-zinc-200 object-cover" src="https://randomuser.me/api/portraits/men/32.jpg" alt="Estudante ativo">
-                    <img class="w-10 h-10 rounded-full border-2 border-background bg-zinc-200 object-cover" src="https://randomuser.me/api/portraits/women/44.jpg" alt="Estudante ativo">
-                    <img class="w-10 h-10 rounded-full border-2 border-background bg-zinc-200 object-cover" src="https://randomuser.me/api/portraits/men/68.jpg" alt="Estudante ativo">
-                    <img class="w-10 h-10 rounded-full border-2 border-background bg-zinc-200 object-cover" src="https://randomuser.me/api/portraits/women/65.jpg" alt="Estudante ativo">
+                    <img class="w-10 h-10 rounded-full border-2 border-background bg-zinc-200 object-cover" src="https://randomuser.me/api/portraits/men/32.jpg" alt="Estudante ativo" loading="lazy" decoding="async">
+                    <img class="w-10 h-10 rounded-full border-2 border-background bg-zinc-200 object-cover" src="https://randomuser.me/api/portraits/women/44.jpg" alt="Estudante ativo" loading="lazy" decoding="async">
+                    <img class="w-10 h-10 rounded-full border-2 border-background bg-zinc-200 object-cover" src="https://randomuser.me/api/portraits/men/68.jpg" alt="Estudante ativo" loading="lazy" decoding="async">
+                    <img class="w-10 h-10 rounded-full border-2 border-background bg-zinc-200 object-cover" src="https://randomuser.me/api/portraits/women/65.jpg" alt="Estudante ativo" loading="lazy" decoding="async">
                 </div>
                 <div class="flex items-center gap-2">
                     <div class="flex">
@@ -279,7 +325,7 @@
                     <div class="media p-4">
                         <div class="media-inner ds-card flex items-center gap-4 px-5 py-4 w-max shadow-2xl border-purple-500/20">
                             <div class="relative">
-                                <img src="https://randomuser.me/api/portraits/women/90.jpg" alt="Membro da Comunidade" class="w-10 h-10 rounded-full object-cover border-2 border-background bg-zinc-200">
+                                <img src="https://randomuser.me/api/portraits/women/90.jpg" alt="Membro da Comunidade" class="w-10 h-10 rounded-full object-cover border-2 border-background bg-zinc-200" loading="lazy" decoding="async">
                                 <div class="absolute -bottom-0.5 -right-0.5 bg-green-500 w-3 h-3 rounded-full border-2 border-card"></div>
                             </div>
                             <div class="text-left">
@@ -365,8 +411,8 @@
         <!-- Ambient Depth / Lighting Effects -->
         <div class="absolute inset-0 bg-dot-pattern opacity-60 z-0 pointer-events-none" style="mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent); -webkit-mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);"></div>
         
-        <div class="absolute top-[10%] left-[-5%] w-[40rem] h-[40rem] bg-emerald-500/10 rounded-full blur-[140px] -z-10 animate-pulse-slow"></div>
-        <div class="absolute bottom-[5%] right-[-5%] w-[35rem] h-[35rem] bg-blue-500/10 rounded-full blur-[140px] -z-10 animate-pulse-slow" style="animation-delay: -3s;"></div>
+        <div class="glow-ambient absolute top-[10%] left-[-5%] w-[40rem] h-[40rem] bg-emerald-500/10 rounded-full blur-[140px] -z-10 animate-pulse-slow"></div>
+        <div class="glow-ambient absolute bottom-[5%] right-[-5%] w-[35rem] h-[35rem] bg-blue-500/10 rounded-full blur-[140px] -z-10 animate-pulse-slow" style="animation-delay: -3s;"></div>
 
         <div class="relative z-20 max-w-[1400px] mx-auto flex flex-col items-center">
             
@@ -514,7 +560,7 @@
                 Segundo dados da pagina, menos de 2% das pessoas chegam a essa parte da pagina, se voce quer participar de um grupo seleto, onde podera utilizar uma plataforma de estudo, planejamento, e muito mais, clique no botão abaixo.
             </p>
             
-            <a href="#grupos-de-estudo" class="gsap-ds-reveal relative inline-flex items-center justify-center px-10 py-5 text-lg font-bold text-black rounded-full bg-white hover:bg-zinc-200 shadow-[0_0_40px_rgba(255,255,255,0.2)] transition-all duration-300 transform hover:scale-105 active:scale-95 group">
+            <a href="formulario.html" id="cta-final" class="gsap-ds-reveal relative inline-flex items-center justify-center px-10 py-5 text-lg font-bold text-black rounded-full bg-white hover:bg-zinc-200 shadow-[0_0_40px_rgba(255,255,255,0.2)] transition-all duration-300 transform hover:scale-105 active:scale-95 group">
                 <span class="relative z-10 flex items-center">
                     Voce tem certeza?
                     <i data-lucide="arrow-up-right" class="w-5 h-5 ml-2 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform"></i>
@@ -536,21 +582,25 @@
             gsap.registerPlugin(ScrollTrigger);
         }
 
-        // 1. Initialize Lenis (Smooth Scroll constraint)
-        const lenis = new Lenis({
-            duration: 1.2,
-            easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-            direction: 'vertical',
-            gestureDirection: 'vertical',
-            smooth: true
-        });
+        // Detecção de mobile: desativa recursos pesados em dispositivos de toque
+        const isMobile = window.matchMedia('(max-width: 768px)').matches || ('ontouchstart' in window);
 
-        // Integração OFICIAL do Lenis com o GSAP Ticker para acabar com Lags
-        lenis.on('scroll', ScrollTrigger.update);
-
-        gsap.ticker.add((time) => {
-            lenis.raf(time * 1000);
-        });
+        // 1. Lenis — scroll suave apenas no desktop
+        // No mobile o scroll nativo é acelerado por hardware; Lenis compete com ele e causa travadas
+        let lenis;
+        if (!isMobile) {
+            lenis = new Lenis({
+                duration: 1.2,
+                easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+                direction: 'vertical',
+                gestureDirection: 'vertical',
+                smooth: true
+            });
+            lenis.on('scroll', ScrollTrigger.update);
+            gsap.ticker.add((time) => {
+                lenis.raf(time * 1000);
+            });
+        }
 
         gsap.ticker.lagSmoothing(0);
 
@@ -565,19 +615,21 @@
           .from('#hero-social', { opacity: 0, duration: 1, ease: 'power2.inOut' }, "-=0.4")
           .from('.float-item', { scale: 0.8, opacity: 0, duration: 1.2, ease: 'back.out(1.4)', stagger: 0.1 }, "-=0.8");
 
-        // 3. Continuous Macro-Floating
-        // Gives organic life to items outside of mouse interaction
-        gsap.utils.toArray('.float-item').forEach((wrapper, i) => {
-            gsap.to(wrapper, {
-                y: "+=35",
-                rotation: () => Math.random() * 12 - 6, // more visible dynamic twist
-                duration: 1.2 + Math.random() * 1.5, // much faster speed
-                repeat: -1,
-                yoyo: true,
-                ease: "sine.inOut",
-                delay: Math.random() * -2
+        // 3. Continuous Macro-Floating — apenas desktop
+        // No mobile: 9 tweens infinitos simultâneos causam jank durante scroll
+        if (!isMobile) {
+            gsap.utils.toArray('.float-item').forEach((wrapper, i) => {
+                gsap.to(wrapper, {
+                    y: "+=35",
+                    rotation: () => Math.random() * 12 - 6,
+                    duration: 1.2 + Math.random() * 1.5,
+                    repeat: -1,
+                    yoyo: true,
+                    ease: "sine.inOut",
+                    delay: Math.random() * -2
+                });
             });
-        });
+        }
 
         // 4. ANIMATION SYSTEM MWG 000 SPEC (Hover Inertia Throw & Rotate)
         // Replicating physics math dynamically without external plugin limits
@@ -776,15 +828,15 @@
         };
 
         const categoryStyles = {
-            policial: { gradient: 'from-blue-400 to-indigo-600', bgSubtle: 'from-blue-100 to-indigo-100 dark:from-blue-900/40 dark:to-indigo-900/40', borderInner: 'dark:border-blue-500/20', textColorClass: 'text-blue-600 dark:text-blue-400', bgPing: 'bg-blue-400', bgDot: 'bg-blue-500', shadowHover: 'group-hover:shadow-blue-500/30', borderHover: 'group-hover:border-blue-500/30', glow: 'from-blue-400 to-indigo-600' },
-            bancaria: { gradient: 'from-emerald-400 to-green-600', bgSubtle: 'from-emerald-100 to-green-100 dark:from-emerald-900/40 dark:to-green-900/40', borderInner: 'dark:border-emerald-500/20', textColorClass: 'text-emerald-600 dark:text-emerald-400', bgPing: 'bg-emerald-400', bgDot: 'bg-emerald-500', shadowHover: 'group-hover:shadow-emerald-500/30', borderHover: 'group-hover:border-emerald-500/30', glow: 'from-emerald-400 to-green-600' },
-            saude: { gradient: 'from-rose-400 to-red-600', bgSubtle: 'from-rose-100 to-red-100 dark:from-rose-900/40 dark:to-red-900/40', borderInner: 'dark:border-rose-500/20', textColorClass: 'text-rose-600 dark:text-rose-400', bgPing: 'bg-rose-400', bgDot: 'bg-rose-500', shadowHover: 'group-hover:shadow-rose-500/30', borderHover: 'group-hover:border-rose-500/30', glow: 'from-rose-400 to-red-600' },
-            militar: { gradient: 'from-lime-500 to-green-700', bgSubtle: 'from-lime-100 to-green-100 dark:from-lime-900/40 dark:to-green-900/40', borderInner: 'dark:border-lime-500/20', textColorClass: 'text-lime-700 dark:text-lime-500', bgPing: 'bg-lime-500', bgDot: 'bg-lime-600', shadowHover: 'group-hover:shadow-lime-600/30', borderHover: 'group-hover:border-lime-600/30', glow: 'from-lime-400 to-green-600' },
-            tribunais: { gradient: 'from-violet-400 to-purple-600', bgSubtle: 'from-violet-100 to-purple-100 dark:from-violet-900/40 dark:to-purple-900/40', borderInner: 'dark:border-violet-500/20', textColorClass: 'text-violet-600 dark:text-violet-400', bgPing: 'bg-violet-400', bgDot: 'bg-violet-500', shadowHover: 'group-hover:shadow-violet-500/30', borderHover: 'group-hover:border-violet-500/30', glow: 'from-violet-400 to-purple-600' },
-            controle: { gradient: 'from-indigo-400 to-violet-600', bgSubtle: 'from-indigo-100 to-violet-100 dark:from-indigo-900/40 dark:to-violet-900/40', borderInner: 'dark:border-indigo-500/20', textColorClass: 'text-indigo-600 dark:text-indigo-400', bgPing: 'bg-indigo-400', bgDot: 'bg-indigo-500', shadowHover: 'group-hover:shadow-indigo-500/30', borderHover: 'group-hover:border-indigo-500/30', glow: 'from-indigo-400 to-violet-600' },
-            fiscal: { gradient: 'from-amber-400 to-orange-500', bgSubtle: 'from-amber-100 to-orange-100 dark:from-amber-900/40 dark:to-orange-900/40', borderInner: 'dark:border-amber-500/20', textColorClass: 'text-amber-600 dark:text-amber-400', bgPing: 'bg-amber-400', bgDot: 'bg-amber-500', shadowHover: 'group-hover:shadow-amber-500/30', borderHover: 'group-hover:border-amber-500/30', glow: 'from-amber-400 to-orange-500' },
-            reguladores: { gradient: 'from-teal-400 to-cyan-500', bgSubtle: 'from-teal-100 to-cyan-100 dark:from-teal-900/40 dark:to-cyan-900/40', borderInner: 'dark:border-teal-500/20', textColorClass: 'text-teal-600 dark:text-teal-400', bgPing: 'bg-teal-400', bgDot: 'bg-teal-500', shadowHover: 'group-hover:shadow-teal-500/30', borderHover: 'group-hover:border-teal-500/30', glow: 'from-teal-400 to-cyan-500' },
-            administrativos: { gradient: 'from-slate-400 to-blue-500', bgSubtle: 'from-slate-100 to-blue-100 dark:from-slate-900/40 dark:to-blue-900/40', borderInner: 'dark:border-slate-500/20', textColorClass: 'text-slate-600 dark:text-slate-400', bgPing: 'bg-slate-400', bgDot: 'bg-slate-500', shadowHover: 'group-hover:shadow-slate-500/30', borderHover: 'group-hover:border-slate-500/30', glow: 'from-slate-400 to-blue-500' }
+            policial:      { gradient: 'from-blue-400 to-indigo-600',   bgSubtle: 'from-blue-100 to-indigo-100 dark:from-blue-900/40 dark:to-indigo-900/40',       borderInner: 'dark:border-blue-500/20',   textColorClass: 'text-blue-600 dark:text-blue-400',     bgPing: 'bg-blue-400',   bgDot: 'bg-blue-500',   shadowHover: 'group-hover:shadow-blue-500/30',   borderHover: 'group-hover:border-blue-500/30',   glow: 'from-blue-400 to-indigo-600',   cardBorder: 'border-blue-400/40',   cardAccent: 'from-blue-400 via-indigo-400 to-blue-500' },
+            bancaria:      { gradient: 'from-emerald-400 to-green-600', bgSubtle: 'from-emerald-100 to-green-100 dark:from-emerald-900/40 dark:to-green-900/40',   borderInner: 'dark:border-emerald-500/20', textColorClass: 'text-emerald-600 dark:text-emerald-400', bgPing: 'bg-emerald-400', bgDot: 'bg-emerald-500', shadowHover: 'group-hover:shadow-emerald-500/30', borderHover: 'group-hover:border-emerald-500/30', glow: 'from-emerald-400 to-green-600', cardBorder: 'border-emerald-400/40', cardAccent: 'from-emerald-400 via-green-400 to-teal-400' },
+            saude:         { gradient: 'from-rose-400 to-red-600',      bgSubtle: 'from-rose-100 to-red-100 dark:from-rose-900/40 dark:to-red-900/40',             borderInner: 'dark:border-rose-500/20',   textColorClass: 'text-rose-600 dark:text-rose-400',     bgPing: 'bg-rose-400',   bgDot: 'bg-rose-500',   shadowHover: 'group-hover:shadow-rose-500/30',   borderHover: 'group-hover:border-rose-500/30',   glow: 'from-rose-400 to-red-600',   cardBorder: 'border-rose-400/40',   cardAccent: 'from-rose-400 via-red-400 to-pink-500' },
+            militar:       { gradient: 'from-lime-500 to-green-700',    bgSubtle: 'from-lime-100 to-green-100 dark:from-lime-900/40 dark:to-green-900/40',         borderInner: 'dark:border-lime-500/20',   textColorClass: 'text-lime-700 dark:text-lime-500',     bgPing: 'bg-lime-500',   bgDot: 'bg-lime-600',   shadowHover: 'group-hover:shadow-lime-600/30',   borderHover: 'group-hover:border-lime-600/30',   glow: 'from-lime-400 to-green-600', cardBorder: 'border-lime-500/40',   cardAccent: 'from-lime-400 via-green-400 to-lime-500' },
+            tribunais:     { gradient: 'from-violet-400 to-purple-600', bgSubtle: 'from-violet-100 to-purple-100 dark:from-violet-900/40 dark:to-purple-900/40',   borderInner: 'dark:border-violet-500/20', textColorClass: 'text-violet-600 dark:text-violet-400', bgPing: 'bg-violet-400', bgDot: 'bg-violet-500', shadowHover: 'group-hover:shadow-violet-500/30', borderHover: 'group-hover:border-violet-500/30', glow: 'from-violet-400 to-purple-600', cardBorder: 'border-violet-400/40', cardAccent: 'from-violet-400 via-purple-400 to-violet-500' },
+            controle:      { gradient: 'from-indigo-400 to-violet-600', bgSubtle: 'from-indigo-100 to-violet-100 dark:from-indigo-900/40 dark:to-violet-900/40',   borderInner: 'dark:border-indigo-500/20', textColorClass: 'text-indigo-600 dark:text-indigo-400', bgPing: 'bg-indigo-400', bgDot: 'bg-indigo-500', shadowHover: 'group-hover:shadow-indigo-500/30', borderHover: 'group-hover:border-indigo-500/30', glow: 'from-indigo-400 to-violet-600', cardBorder: 'border-indigo-400/40', cardAccent: 'from-indigo-400 via-violet-400 to-indigo-500' },
+            fiscal:        { gradient: 'from-amber-400 to-orange-500',  bgSubtle: 'from-amber-100 to-orange-100 dark:from-amber-900/40 dark:to-orange-900/40',     borderInner: 'dark:border-amber-500/20',  textColorClass: 'text-amber-600 dark:text-amber-400',   bgPing: 'bg-amber-400',  bgDot: 'bg-amber-500',  shadowHover: 'group-hover:shadow-amber-500/30',  borderHover: 'group-hover:border-amber-500/30',  glow: 'from-amber-400 to-orange-500', cardBorder: 'border-amber-400/40', cardAccent: 'from-amber-400 via-orange-400 to-yellow-400' },
+            reguladores:   { gradient: 'from-teal-400 to-cyan-500',     bgSubtle: 'from-teal-100 to-cyan-100 dark:from-teal-900/40 dark:to-cyan-900/40',           borderInner: 'dark:border-teal-500/20',   textColorClass: 'text-teal-600 dark:text-teal-400',     bgPing: 'bg-teal-400',   bgDot: 'bg-teal-500',   shadowHover: 'group-hover:shadow-teal-500/30',   borderHover: 'group-hover:border-teal-500/30',   glow: 'from-teal-400 to-cyan-500',  cardBorder: 'border-teal-400/40',   cardAccent: 'from-teal-400 via-cyan-400 to-teal-500' },
+            administrativos:{ gradient: 'from-slate-400 to-blue-500',   bgSubtle: 'from-slate-100 to-blue-100 dark:from-slate-900/40 dark:to-blue-900/40',         borderInner: 'dark:border-slate-500/20',  textColorClass: 'text-slate-600 dark:text-slate-400',   bgPing: 'bg-slate-400',  bgDot: 'bg-slate-500',  shadowHover: 'group-hover:shadow-slate-500/30',  borderHover: 'group-hover:border-slate-500/30',  glow: 'from-slate-400 to-blue-500', cardBorder: 'border-slate-400/40',  cardAccent: 'from-slate-400 via-blue-400 to-slate-500' }
         };
 
         const cardsData = [
@@ -865,15 +917,18 @@
                     <div class="card-float-body h-full cursor-pointer group origin-center">
                         <div class="absolute inset-0 bg-gradient-to-br ${style.glow} rounded-[1.5rem] opacity-[0.12] md:opacity-0 md:group-hover:opacity-20 blur-xl transition-all duration-700 -z-10 animate-pulse-slow"></div>
                         
-                        <div class="ds-card relative h-full flex flex-col p-6 lg:p-7 overflow-hidden rounded-[1.75rem] backdrop-blur-[30px] border border-white/20 dark:border-white/5 shadow-[0_10px_40px_rgba(0,0,0,0.05)] transition-all duration-500 group-hover:border-white/30 group-hover:shadow-[0_15px_50px_rgba(0,0,0,0.08)]">
-                            
+                        <div class="ds-card relative h-full flex flex-col p-6 lg:p-7 overflow-hidden rounded-[1.75rem] backdrop-blur-[30px] border ${style.cardBorder} shadow-[0_10px_40px_rgba(0,0,0,0.05)] transition-all duration-500 group-hover:shadow-[0_15px_50px_rgba(0,0,0,0.10)]">
+
                             <!-- Glassmorphism layers -->
                             <div class="absolute inset-0 bg-[rgba(255,255,255,0.12)] dark:bg-[rgba(255,255,255,0.03)] pointer-events-none transition-colors duration-500 group-hover:bg-[rgba(255,255,255,0.18)] dark:group-hover:bg-[rgba(255,255,255,0.05)]"></div>
                             <div class="absolute inset-0 bg-gradient-to-br from-[rgba(180,190,200,0.25)] to-[rgba(240,220,200,0.25)] dark:from-[rgba(180,190,200,0.05)] dark:to-[rgba(240,220,200,0.08)] pointer-events-none mix-blend-overlay"></div>
-                            
-                            <div class="absolute inset-0 pointer-events-none">
-                                <div class="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/40 dark:via-white/20 to-transparent"></div>
-                                <div class="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-[radial-gradient(circle,rgba(255,255,255,0.2),transparent_60%)] dark:bg-[radial-gradient(circle,rgba(255,255,255,0.05),transparent_60%)]"></div>
+
+                            <!-- Identidade visual: linha de cor no topo + reflexo de luz -->
+                            <div class="absolute inset-0 pointer-events-none z-10">
+                                <!-- Linha gradiente colorida no topo — identidade da categoria -->
+                                <div class="absolute top-0 inset-x-0 h-[3px] bg-gradient-to-r ${style.cardAccent} opacity-80 rounded-t-[1.75rem]"></div>
+                                <!-- Reflexo de luz sutil abaixo da linha -->
+                                <div class="absolute top-[3px] inset-x-0 h-[40px] bg-gradient-to-b from-white/10 to-transparent"></div>
                             </div>
 
                             <div class="flex items-start justify-between mb-6 relative z-20">
@@ -924,46 +979,53 @@
 
         // 3. Sistema de Animação e Filtro
         function initCardAnimations() {
-            // Idle Floating Effect
-            gsap.utils.toArray('.card-float-body').forEach((card) => {
-                if (card.dataset.floating) return;
-                card.dataset.floating = "true";
-                gsap.to(card, {
-                    y: "-=6", duration: 2.5 + Math.random() * 1.5, repeat: -1, yoyo: true, ease: "sine.inOut", delay: Math.random() * -2
+            // Idle Floating Effect — apenas desktop
+            // No mobile: 30 tweens infinitos simultâneos são a principal causa de travadas
+            if (!isMobile) {
+                gsap.utils.toArray('.card-float-body').forEach((card) => {
+                    if (card.dataset.floating) return;
+                    card.dataset.floating = "true";
+                    gsap.to(card, {
+                        y: "-=6", duration: 2.5 + Math.random() * 1.5, repeat: -1, yoyo: true, ease: "sine.inOut", delay: Math.random() * -2
+                    });
                 });
-            });
+            }
 
             // Parallax Entry
             if (typeof ScrollTrigger !== 'undefined') {
                 const allWrappers = gsap.utils.toArray('.group-card-wrapper');
-                // Remove triggers antigos se houver
                 ScrollTrigger.getAll().forEach(t => {
                     if (t.trigger && t.trigger.classList && t.trigger.classList.contains('group-card-wrapper')) {
                         t.kill();
                     }
                 });
 
-                // Entrada Batch
+                // Entrada Batch — stagger menor no mobile para ser mais rápido
                 ScrollTrigger.batch(allWrappers, {
-                    start: 'top 85%',
+                    start: 'top 90%',
                     onEnter: batch => {
                         gsap.from(batch, {
-                            opacity: 0, y: 50, duration: 0.8, stagger: 0.15, ease: 'power3.out', overwrite: 'auto'
+                            opacity: 0, y: isMobile ? 25 : 50,
+                            duration: isMobile ? 0.5 : 0.8,
+                            stagger: isMobile ? 0.06 : 0.15,
+                            ease: 'power3.out', overwrite: 'auto'
                         });
                     },
                     once: true
                 });
 
-                // Icon parallax scroll
-                allWrappers.forEach((card) => {
-                    const icon = card.querySelector('.card-parallax-icon');
-                    if (icon && !icon.dataset.parallaxActive) {
-                        icon.dataset.parallaxActive = "true";
-                        gsap.to(icon, {
-                            y: -15, scrollTrigger: { trigger: card, start: 'top bottom', end: 'bottom top', scrub: 1 }, ease: 'none'
-                        });
-                    }
-                });
+                // Icon parallax — apenas desktop (causa jank durante scroll no mobile)
+                if (!isMobile) {
+                    allWrappers.forEach((card) => {
+                        const icon = card.querySelector('.card-parallax-icon');
+                        if (icon && !icon.dataset.parallaxActive) {
+                            icon.dataset.parallaxActive = "true";
+                            gsap.to(icon, {
+                                y: -15, scrollTrigger: { trigger: card, start: 'top bottom', end: 'bottom top', scrub: 1 }, ease: 'none'
+                            });
+                        }
+                    });
+                }
             }
         }
 
@@ -1127,6 +1189,66 @@
         });
     </script>
 
+    <!-- Page Transition Grid -->
+    <div id="page-transition" aria-hidden="true"></div>
+
+    <!-- Page Transition Logic -->
+    <script>
+        (function() {
+            const pt = document.getElementById('page-transition');
+            if (!pt) return;
+
+            function buildGrid() {
+                const cols = parseInt(
+                    getComputedStyle(pt).gridTemplateColumns.split(' ').filter(Boolean).length
+                ) || 8;
+                const blockPx = pt.offsetWidth / cols;
+                const rows = Math.ceil(pt.offsetHeight / blockPx);
+                pt.style.gridTemplateRows = `repeat(${rows}, ${blockPx}px)`;
+                const total = cols * rows;
+                const frag = document.createDocumentFragment();
+                for (let i = 0; i < total; i++) {
+                    const d = document.createElement('div');
+                    d.className = 'pt-block';
+                    frag.appendChild(d);
+                }
+                pt.innerHTML = '';
+                pt.appendChild(frag);
+            }
+
+            buildGrid();
+            window.addEventListener('resize', buildGrid);
+
+            const ctaFinal = document.getElementById('cta-final');
+            if (!ctaFinal) return;
+
+            ctaFinal.addEventListener('click', function(e) {
+                e.preventDefault();
+                const dest = this.getAttribute('href');
+
+                // Desativa o hover/scale durante a saída
+                this.style.pointerEvents = 'none';
+
+                pt.style.visibility = 'visible';
+                pt.style.pointerEvents = 'all';
+
+                gsap.fromTo('.pt-block',
+                    { opacity: 0, scale: 0.5 },
+                    {
+                        opacity: 1,
+                        scale: 1,
+                        duration: 0.32,
+                        ease: 'power2.inOut',
+                        stagger: { amount: 0.55, from: 'random' },
+                        onComplete: function() {
+                            window.location.href = dest;
+                        }
+                    }
+                );
+            });
+        })();
+    </script>
+
     <!-- 3D Background - Mobile Optimized -->
     <script type="module">
         import * as THREE from "https://esm.sh/three@0.160.0";
@@ -1161,8 +1283,9 @@
             const whiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.7 });
 
             // Densidade e escalas ajustadas para a câmera (mais focado e minimalista)
-            const isMobile = window.innerWidth <= 768;
-            const countMult = isMobile ? 0.6 : 1.0; 
+            const isMobileThree = window.innerWidth <= 768;
+            // Mobile: reduz drasticamente a contagem de shapes (0.3 vs 1.0)
+            const countMult = isMobileThree ? 0.3 : 1.0;
 
             function createGeom(type, size) {
                 switch(type) {
@@ -1184,8 +1307,8 @@
                     
                     // Espalhamento cirurgicamente focado na área visível da câmera
                     mesh.position.set(
-                        (Math.random() - 0.5) * (isMobile ? 25 : 55), // Largura X focada no centro estendido
-                        (Math.random() - 0.5) * (isMobile ? 35 : 55), // Altura Y confinada ao espaço
+                        (Math.random() - 0.5) * (isMobileThree ? 25 : 55),
+                        (Math.random() - 0.5) * (isMobileThree ? 35 : 55),
                         Math.random() * zRng.spread + zRng.base
                     );
                     mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
@@ -1230,26 +1353,26 @@
             // Render do primeiro quadro
             renderer.render(scene, camera);
 
+            let threeRafId = null;
+
             function animate() {
-                requestAnimationFrame(animate);
+                threeRafId = requestAnimationFrame(animate);
 
                 // Scroll parallax local
-                parallaxGroups[0].position.y = (scrollProg - 0.5) * -15; 
+                parallaxGroups[0].position.y = (scrollProg - 0.5) * -15;
                 parallaxGroups[1].position.y = (scrollProg - 0.5) * -8;
                 parallaxGroups[2].position.y = (scrollProg - 0.5) * -4;
 
-                const limitX = isMobile ? 22 : 45;
-                const limitY = isMobile ? 30 : 45;
+                const limitX = isMobileThree ? 22 : 45;
+                const limitY = isMobileThree ? 30 : 45;
 
                 shapes.forEach(({ mesh, rotationSpeed, vx, vy }) => {
                     mesh.rotation.x += rotationSpeed;
                     mesh.rotation.y += rotationSpeed * 0.8;
-                    
-                    // Fluidez espacial entrando/saindo constantemente
+
                     mesh.position.x += vx;
                     mesh.position.y += vy + Math.sin(Date.now() * 0.001 + mesh.position.x) * 0.015;
 
-                    // Reaparecer na borda exata da visão da câmera
                     if (mesh.position.x > limitX) mesh.position.x = -limitX;
                     if (mesh.position.x < -limitX) mesh.position.x = limitX;
                     if (mesh.position.y > limitY) mesh.position.y = -limitY;
@@ -1268,7 +1391,19 @@
                 renderer.setSize(newW, newH);
             });
 
-            animate();
+            // IntersectionObserver: pausa o loop quando a seção não está visível
+            // Evita ~60fps de GPU desnecessários enquanto o usuário está em outra seção
+            const threeObserver = new IntersectionObserver((entries) => {
+                if (entries[0].isIntersecting) {
+                    if (!threeRafId) animate();
+                } else {
+                    if (threeRafId) {
+                        cancelAnimationFrame(threeRafId);
+                        threeRafId = null;
+                    }
+                }
+            }, { threshold: 0.05 });
+            threeObserver.observe(section);
         }
     </script>
 </body>

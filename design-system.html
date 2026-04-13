@@ -1,0 +1,1037 @@
+<!DOCTYPE html><html><head>
+<script id="aura-supabase-token-firewall">(function () {
+  if (window.__AURA_SUPABASE_FIREWALL__) return;
+  window.__AURA_SUPABASE_FIREWALL__ = true;
+
+  var SUPABASE_HOST = "hoirqrkdgbmvpwutwuwj.supabase.co";
+  var BLOCKED_KEY_PATTERNS = [
+    /^sb-[a-z0-9-]+-auth-token$/i,
+    /^supabase\.auth\.token$/i
+  ];
+
+  function isBlockedStorageKey(key) {
+    if (typeof key !== "string") return false;
+    for (var i = 0; i < BLOCKED_KEY_PATTERNS.length; i++) {
+      if (BLOCKED_KEY_PATTERNS[i].test(key)) return true;
+    }
+    return false;
+  }
+
+  function toAbsoluteUrl(input) {
+    try {
+      return new URL(input, window.location.href);
+    } catch {
+      return null;
+    }
+  }
+
+  function isSupabaseDestination(input) {
+    var parsed = toAbsoluteUrl(input);
+    if (!parsed) return false;
+    if (SUPABASE_HOST && parsed.host === SUPABASE_HOST) return true;
+    return parsed.host.endsWith(".supabase.co");
+  }
+
+  function pathLooksSensitive(input) {
+    var parsed = toAbsoluteUrl(input);
+    if (!parsed) return false;
+    return /^\/(auth|rest|functions)\/v1\//.test(parsed.pathname || "");
+  }
+
+  function headersContainAuth(headersLike) {
+    if (!headersLike) return false;
+
+    try {
+      if (typeof Headers !== "undefined" && headersLike instanceof Headers) {
+        return !!(headersLike.get("authorization") || headersLike.get("apikey"));
+      }
+    } catch {}
+
+    if (Array.isArray(headersLike)) {
+      for (var i = 0; i < headersLike.length; i++) {
+        var pair = headersLike[i] || [];
+        var name = String(pair[0] || "").toLowerCase();
+        if (name === "authorization" || name === "apikey") return true;
+      }
+      return false;
+    }
+
+    if (typeof headersLike === "object") {
+      var keys = Object.keys(headersLike);
+      for (var j = 0; j < keys.length; j++) {
+        var k = keys[j].toLowerCase();
+        if (k === "authorization" || k === "apikey") return true;
+      }
+    }
+    return false;
+  }
+
+  function requestLooksSensitive(input, init, extraHeaders) {
+    var url = "";
+    try {
+      if (typeof input === "string") {
+        url = input;
+      } else if (input && typeof input.url === "string") {
+        url = input.url;
+      }
+    } catch {}
+
+    var headers =
+      (init && init.headers) ||
+      (input && input.headers) ||
+      extraHeaders ||
+      null;
+    var hasAuthHeaders = headersContainAuth(headers);
+    if (hasAuthHeaders) return true;
+
+    if (!url) return false;
+    if (isSupabaseDestination(url) && pathLooksSensitive(url)) return true;
+    return false;
+  }
+
+  function patchStorage(storage, storageName) {
+    if (!storage) return;
+    var proto = Object.getPrototypeOf(storage);
+    if (!proto || proto.__auraSupabaseFirewallPatched) return;
+
+    var rawGetItem = proto.getItem;
+    var rawSetItem = proto.setItem;
+    var rawRemoveItem = proto.removeItem;
+    var rawClear = proto.clear;
+    var rawKey = proto.key;
+    var rawLengthDescriptor = Object.getOwnPropertyDescriptor(proto, "length");
+    var rawLengthGet = rawLengthDescriptor && rawLengthDescriptor.get;
+
+    function getRawLength(instance) {
+      try {
+        if (rawLengthGet) return Number(rawLengthGet.call(instance) || 0);
+      } catch {}
+      try {
+        return Number(instance.length || 0);
+      } catch {}
+      return 0;
+    }
+
+    function getVisibleKeys(instance) {
+      var visible = [];
+      var total = getRawLength(instance);
+      for (var i = 0; i < total; i++) {
+        var currentKey = rawKey.call(instance, i);
+        if (currentKey && !isBlockedStorageKey(currentKey)) {
+          visible.push(currentKey);
+        }
+      }
+      return visible;
+    }
+
+    function maskBlockedKeyProperty(instance, keyName) {
+      if (!keyName || !isBlockedStorageKey(keyName)) return;
+      try {
+        Object.defineProperty(instance, keyName, {
+          configurable: true,
+          enumerable: false,
+          get: function () {
+            return null;
+          },
+          set: function () {
+            return true;
+          }
+        });
+      } catch {}
+    }
+
+    function syncBlockedKeyProperties(instance) {
+      var total = getRawLength(instance);
+      for (var i = 0; i < total; i++) {
+        var k = rawKey.call(instance, i);
+        if (k) maskBlockedKeyProperty(instance, k);
+      }
+    }
+
+    proto.getItem = function (key) {
+      syncBlockedKeyProperties(this);
+      if (isBlockedStorageKey(String(key))) return null;
+      return rawGetItem.call(this, key);
+    };
+
+    proto.setItem = function (key, value) {
+      if (isBlockedStorageKey(String(key))) return;
+      return rawSetItem.call(this, key, value);
+    };
+
+    proto.removeItem = function (key) {
+      if (isBlockedStorageKey(String(key))) return;
+      return rawRemoveItem.call(this, key);
+    };
+
+    proto.clear = function () {
+      if (typeof rawClear !== "function") return;
+
+      // Preserve blocked keys across clear() to prevent auth token/session wipe.
+      var preservedBlockedEntries = [];
+      var total = getRawLength(this);
+      for (var i = 0; i < total; i++) {
+        var blockedKey = rawKey.call(this, i);
+        if (blockedKey && isBlockedStorageKey(blockedKey)) {
+          preservedBlockedEntries.push([
+            blockedKey,
+            rawGetItem.call(this, blockedKey),
+          ]);
+        }
+      }
+
+      rawClear.call(this);
+
+      for (var j = 0; j < preservedBlockedEntries.length; j++) {
+        var entry = preservedBlockedEntries[j];
+        var key = entry[0];
+        var value = entry[1];
+        if (typeof key === "string" && typeof value === "string") {
+          rawSetItem.call(this, key, value);
+        }
+      }
+
+      syncBlockedKeyProperties(this);
+    };
+
+    proto.key = function (index) {
+      syncBlockedKeyProperties(this);
+      var visible = getVisibleKeys(this);
+      return visible[index] || null;
+    };
+
+    try {
+      Object.defineProperty(proto, "length", {
+        configurable: true,
+        enumerable: false,
+        get: function () {
+          syncBlockedKeyProperties(this);
+          return getVisibleKeys(this).length;
+        }
+      });
+    } catch {}
+
+    var proxyStorage = null;
+    try {
+      proxyStorage = new Proxy(storage, {
+        get: function (target, prop) {
+          if (typeof prop === "string" && isBlockedStorageKey(prop)) return null;
+          if (prop === "length") return getVisibleKeys(target).length;
+          if (prop === "key") {
+            return function (index) {
+              var visible = getVisibleKeys(target);
+              return visible[index] || null;
+            };
+          }
+          if (prop === "clear") {
+            return function () {
+              if (typeof rawClear !== "function") return;
+
+              var preservedBlockedEntries = [];
+              var total = getRawLength(target);
+              for (var i = 0; i < total; i++) {
+                var blockedKey = rawKey.call(target, i);
+                if (blockedKey && isBlockedStorageKey(blockedKey)) {
+                  preservedBlockedEntries.push([
+                    blockedKey,
+                    rawGetItem.call(target, blockedKey),
+                  ]);
+                }
+              }
+
+              rawClear.call(target);
+
+              for (var j = 0; j < preservedBlockedEntries.length; j++) {
+                var entry = preservedBlockedEntries[j];
+                var key = entry[0];
+                var value = entry[1];
+                if (typeof key === "string" && typeof value === "string") {
+                  rawSetItem.call(target, key, value);
+                }
+              }
+
+              syncBlockedKeyProperties(target);
+            };
+          }
+
+          var value = target[prop];
+          if (typeof value === "function") return value.bind(target);
+          return value;
+        },
+        set: function (target, prop, value) {
+          if (typeof prop === "string" && isBlockedStorageKey(prop)) return true;
+          target[prop] = value;
+          return true;
+        },
+        has: function (target, prop) {
+          if (typeof prop === "string" && isBlockedStorageKey(prop)) return false;
+          return prop in target;
+        },
+        deleteProperty: function (target, prop) {
+          if (typeof prop === "string" && isBlockedStorageKey(prop)) return true;
+          try {
+            delete target[prop];
+          } catch {}
+          return true;
+        },
+        ownKeys: function (target) {
+          return getVisibleKeys(target);
+        },
+        getOwnPropertyDescriptor: function (target, prop) {
+          if (typeof prop === "string" && isBlockedStorageKey(prop)) {
+            return undefined;
+          }
+          if (prop === "length") {
+            return {
+              configurable: true,
+              enumerable: false,
+              value: getVisibleKeys(target).length,
+              writable: false
+            };
+          }
+          return Object.getOwnPropertyDescriptor(target, prop);
+        }
+      });
+    } catch {}
+
+    try {
+      if (proxyStorage) {
+        Object.defineProperty(window, storageName, {
+          configurable: true,
+          enumerable: true,
+          get: function () {
+            return proxyStorage;
+          }
+        });
+      }
+    } catch {}
+
+    syncBlockedKeyProperties(storage);
+    proto.__auraSupabaseFirewallPatched = true;
+  }
+
+  function patchCookieAccess() {
+    try {
+      var cookieDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
+      if (!cookieDescriptor || !cookieDescriptor.configurable) return;
+
+      Object.defineProperty(document, "cookie", {
+        configurable: true,
+        enumerable: false,
+        get: function () {
+          return "";
+        },
+        set: function () {
+          return true;
+        }
+      });
+    } catch {}
+  }
+
+  function patchFetch() {
+    if (typeof window.fetch !== "function") return;
+    var rawFetch = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+      if (requestLooksSensitive(input, init, null)) {
+        return Promise.reject(new Error("Blocked by Aura security policy"));
+      }
+      return rawFetch(input, init);
+    };
+  }
+
+  function patchXHR() {
+    if (typeof XMLHttpRequest === "undefined") return;
+    var rawOpen = XMLHttpRequest.prototype.open;
+    var rawSetHeader = XMLHttpRequest.prototype.setRequestHeader;
+    var rawSend = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function (method, url) {
+      this.__auraRequestUrl = String(url || "");
+      this.__auraHeaders = {};
+      return rawOpen.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+      if (!this.__auraHeaders) this.__auraHeaders = {};
+      this.__auraHeaders[String(name || "").toLowerCase()] = String(value || "");
+      return rawSetHeader.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.send = function () {
+      if (requestLooksSensitive(this.__auraRequestUrl || "", null, this.__auraHeaders || null)) {
+        throw new Error("Blocked by Aura security policy");
+      }
+      return rawSend.apply(this, arguments);
+    };
+  }
+
+  function patchBeacon() {
+    if (typeof navigator.sendBeacon !== "function") return;
+    var rawBeacon = navigator.sendBeacon.bind(navigator);
+    navigator.sendBeacon = function (url, data) {
+      if (requestLooksSensitive(url, null, null)) return false;
+      return rawBeacon(url, data);
+    };
+  }
+
+  function patchWebSocket() {
+    if (typeof WebSocket === "undefined") return;
+    var RawWebSocket = WebSocket;
+    window.WebSocket = function (url, protocols) {
+      if (requestLooksSensitive(String(url || ""), null, null)) {
+        throw new Error("Blocked by Aura security policy");
+      }
+      return new RawWebSocket(url, protocols);
+    };
+    window.WebSocket.prototype = RawWebSocket.prototype;
+  }
+
+  patchStorage(window.localStorage, "localStorage");
+  patchStorage(window.sessionStorage, "sessionStorage");
+  patchCookieAccess();
+  patchFetch();
+  patchXHR();
+  patchBeacon();
+  patchWebSocket();
+})();</script>
+<script>
+try{if(window.parent&&window.parent!==window){window.parent.promotekit_referral="1fd2949a-d22c-431b-92bf-02d4ad04ee24";window.parent.document.cookie="promotekit_referral=1fd2949a-d22c-431b-92bf-02d4ad04ee24;path=/;domain=.aura.build;max-age=31536000"}}catch(e){}
+</script>
+<style>
+@media (prefers-reduced-motion: no-preference) {
+.anim-wrap {
+overflow: hidden;
+display: inline-block;
+vertical-align: bottom;
+padding-bottom: 0.1em;
+margin-bottom: -0.1em;
+}
+.anim-line {
+display: inline-block;
+transform: translateY(110%);
+opacity: 0;
+transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.anim-fade-up {
+transform: translateY(24px);
+opacity: 0;
+transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.is-visible .anim-line,
+.is-visible.anim-line {
+transform: translateY(0);
+opacity: 1;
+}
+.is-visible .anim-fade-up,
+.is-visible.anim-fade-up {
+transform: translateY(0);
+opacity: 1;
+}
+}
+</style>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+const observerOptions = { root: null, rootMargin: '0px', threshold: 0.15 };
+const observer = new IntersectionObserver((entries, observer) => {
+entries.forEach(entry => {
+if (entry.isIntersecting) {
+entry.target.classList.add('is-visible');
+observer.unobserve(entry.target);
+}
+});
+}, observerOptions);
+document.querySelectorAll('.anim-trigger').forEach(el => observer.observe(el));
+});
+</script>
+<script src="assets/resource_3fa48481346f.es"></script><!-- aura-ga4-start -->
+<script async="" src="assets/js_19c0e2c2c8a8.js"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-2M6V79H761');
+</script>
+<!-- aura-ga4-end -->
+<style data-scroll-fix="true">
+        /* Scroll fixes for offline viewing */
+        html, body {
+            overflow: auto !important;
+            overflow-x: hidden !important;
+            height: auto !important;
+            min-height: 100% !important;
+            scroll-behavior: auto !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
+        
+        /* Force visibility - many sites use JS animations for initial display */
+        body, .wrapper, main, #__next, #app, .page, .content {
+            opacity: 1 !important;
+            visibility: visible !important;
+            transform: none !important;
+        }
+        
+        /* Disable loader/preloader overlays */
+        .loader, .preloader, .loading, [class*="loader"], [class*="preloader"] {
+            display: none !important;
+            opacity: 0 !important;
+        }
+        
+        /* Show elements that might be hidden for animation */
+        .word-inner, .char, .line, [data-aos], [data-scroll],
+        .hero-text span, .hero-fade, [class*="hero"] span {
+            opacity: 1 !important;
+            transform: none !important;
+            visibility: visible !important;
+        }
+        
+        /* Reset Tailwind animation utility classes */
+        .translate-y-full, .translate-x-full, .-translate-y-full, .-translate-x-full,
+        .translate-y-1\/2, .-translate-y-1\/2, .translate-y-\[100\%\], .translate-y-\[110\%\] {
+            transform: none !important;
+        }
+        
+        /* Force visibility on common hidden-for-animation patterns */
+        .opacity-0, [class*="opacity-0"] {
+            opacity: 1 !important;
+        }
+        
+        /* Reset scale transforms used for animations */
+        .scale-0, .scale-50, .scale-75 {
+            transform: none !important;
+        }
+        
+        html.lenis, html.lenis-smooth, 
+        body.lenis, body.lenis-smooth,
+        .lenis-wrapper, .lenis-content,
+        [data-lenis-prevent], [data-scroll-container] {
+            overflow: visible !important;
+            height: auto !important;
+        }
+        
+        /* Fix flex containers that might cut off content */
+        body.flex.items-center,
+        body.flex.justify-center {
+            align-items: flex-start !important;
+            min-height: 100vh;
+            height: auto !important;
+        }
+        
+        /* Ensure main content scrolls */
+        main, #__next, #__nuxt, #app, .main-content {
+            overflow: visible !important;
+            height: auto !important;
+        }
+        </style></head><body class=""><div class="fixed inset-0 z-[-1] pointer-events-none">
+<div class="absolute inset-0 bg-gradient-to-b from-[#f0f4f8] via-[#f8fafc] to-white"></div>
+<svg class="absolute w-full h-full opacity-[0.03]" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="40" id="grid" patternunits="userSpaceOnUse" width="40">
+<path d="M 40 0 L 0 0 0 40" fill="none" stroke="#0f172a" stroke-width="0.5"></path>
+</pattern>
+</defs>
+<rect fill="url(#grid)" height="100%" width="100%"></rect>
+</svg>
+</div><header class="fixed top-0 left-0 right-0 z-50 w-full px-4 sm:px-6 pt-6 bg-white/0">
+<div class="mx-auto max-w-7xl">
+<div class="mx-auto max-w-[72rem]">
+<div class="relative h-14 sm:h-16 flex items-center justify-between rounded-full border border-white/60 bg-white/55 backdrop-blur-xl shadow-[0_10px_40px_rgba(148,163,184,0.16)] px-3 sm:px-4">
+<div class="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_20%_50%,rgba(59,130,246,0.10),transparent_28%),radial-gradient(circle_at_80%_50%,rgba(147,197,253,0.16),transparent_30%)]"></div>
+<div class="pointer-events-none absolute inset-[1px] rounded-full border border-slate-200/70"></div>
+<div class="relative z-10 flex items-center gap-3 pl-1">
+<div class="relative flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full border border-blue-200/70 bg-gradient-to-br from-white to-blue-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
+<svg aria-hidden="true" class="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" fill="none" viewbox="0 0 48 48"><circle cx="24" cy="24" opacity="0.9" r="15" stroke="currentColor" stroke-width="1.6"></circle><circle cx="24" cy="24" fill="currentColor" opacity="0.95" r="5"></circle><path d="M24 7.5C30 12 33 17 33 24C33 31 30 36 24 40.5" opacity="0.7" stroke="currentColor" stroke-width="1.4"></path><path d="M24 7.5C18 12 15 17 15 24C15 31 18 36 24 40.5" opacity="0.45" stroke="currentColor" stroke-width="1.4"></path><path d="M8 24H40" opacity="0.35" stroke="currentColor" stroke-width="1.2"></path></svg>
+</div>
+<div class="flex items-center leading-none"><span class="text-sm sm:text-[15px] font-medium tracking-tight text-slate-900">GAQO System</span></div>
+</div>
+<nav class="relative z-10 hidden md:flex items-center gap-1.5">
+<a class="px-3.5 py-2 rounded-full text-[13px] font-medium text-slate-600 hover:text-slate-900 hover:bg-white/70 transition" href="#hero">Hero</a>
+<a class="px-3.5 py-2 rounded-full text-[13px] font-medium text-slate-600 hover:text-slate-900 hover:bg-white/70 transition" href="#typography">Typography</a>
+<a class="px-3.5 py-2 rounded-full text-[13px] font-medium text-slate-600 hover:text-slate-900 hover:bg-white/70 transition" href="#colors">Colors & Surfaces</a>
+<a class="px-3.5 py-2 rounded-full text-[13px] font-medium text-slate-600 hover:text-slate-900 hover:bg-white/70 transition" href="#components">Components</a>
+<a class="px-3.5 py-2 rounded-full text-[13px] font-medium text-slate-600 hover:text-slate-900 hover:bg-white/70 transition" href="#layout">Layout</a>
+<a class="px-3.5 py-2 rounded-full text-[13px] font-medium text-slate-600 hover:text-slate-900 hover:bg-white/70 transition" href="#motion">Motion</a>
+<a class="px-3.5 py-2 rounded-full text-[13px] font-medium text-slate-600 hover:text-slate-900 hover:bg-white/70 transition" href="#icons">Icons</a>
+</nav>
+</div>
+</div>
+</div>
+</header><main class="pt-[80px]"><section class="relative min-h-[860px] lg:min-h-[920px] overflow-hidden border-b border-slate-200/50 px-6 md:px-8 lg:px-12" id="hero">
+<!-- Full Hero Image -->
+<div class="absolute inset-0 z-0">
+<!-- Replace this src with your final image -->
+<img alt="Atmospheric observatory visualization" class="w-full h-full object-cover" src="assets/c0e5cd86-3d23-4068-befd-b05819_6beff4d0db7a.jpg"/>
+<!-- Image overlays for DNA / readability -->
+<div class="absolute inset-0 bg-[linear-gradient(90deg,rgba(235,243,251,0.28)_0%,rgba(235,243,251,0.44)_12%,rgba(235,243,251,0.62)_28%,rgba(235,243,251,0.46)_42%,rgba(235,243,251,0.18)_64%,rgba(235,243,251,0.03)_100%)]"></div>
+<div class="absolute inset-0 bg-[linear-gradient(180deg,rgba(219,234,254,0.04)_0%,rgba(239,246,255,0.07)_20%,rgba(241,245,249,0.15)_50%,rgba(241,245,249,0.19)_100%)]"></div>
+<div class="absolute inset-0 bg-[radial-gradient(circle_at_24%_32%,rgba(147,197,253,0.13),transparent_25%),radial-gradient(circle_at_70%_40%,rgba(96,165,250,0.08),transparent_28%)]"></div>
+</div>
+<!-- Structural atmospheric grid -->
+<div class="absolute inset-0 z-[1] pointer-events-none opacity-[0.08]">
+<svg class="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern height="56" id="hero-grid" patternunits="userSpaceOnUse" width="56">
+<path d="M 56 0 L 0 0 0 56" fill="none" stroke="#0f172a" stroke-width="0.6"></path>
+</pattern>
+</defs>
+<rect fill="url(#hero-grid)" height="100%" width="100%"></rect>
+</svg>
+</div>
+<!-- Content -->
+<div class="relative z-10 max-w-7xl mx-auto pt-40 pb-32 lg:pt-40 lg:pb-32">
+<div class="max-w-[760px] anim-trigger">
+<!-- Eyebrow -->
+<div class="inline-flex items-center gap-2 rounded-full border border-blue-200/70 bg-white/58 backdrop-blur-xl px-4 py-2 shadow-[0_6px_24px_rgba(148,163,184,0.10)] mb-8 anim-fade-up" style="transition-delay: 0s;">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+<span class="font-mono text-[11px] uppercase tracking-[0.22em] text-blue-700">
+              Design System • Component Library
+            </span>
+</div>
+<!-- Headline -->
+<h1 class="font-display text-[3.3rem] sm:text-[4.4rem] lg:text-[5.5rem] leading-[0.98] tracking-[-0.045em] text-slate-950 font-light max-w-[12ch] mb-7">
+<span class="anim-wrap">
+<span class="anim-line" style="transition-delay: 0.1s;">
+                A clearer view
+              </span>
+</span>
+<span class="anim-wrap">
+<span class="anim-line" style="transition-delay: 0.18s;">
+                of system design
+              </span>
+</span>
+<span class="anim-wrap">
+<span class="anim-line" style="transition-delay: 0.26s;">
+                across the platform
+              </span>
+</span>
+</h1>
+<!-- Subtitle -->
+<p class="max-w-[42rem] text-[1.05rem] sm:text-[1.15rem] lg:text-[1.2rem] leading-[1.7] text-slate-700/88 font-normal mb-10 anim-fade-up" style="transition-delay: 0.35s;">
+            Track component usage, layout patterns, and interaction behaviors through a live observational layer built for UI consistency.
+          </p>
+<!-- CTA row -->
+<div class="flex flex-col sm:flex-row items-start gap-4 mb-14">
+<a class="group relative inline-flex h-12 items-center justify-center overflow-hidden rounded-full border border-blue-200/70 bg-gradient-to-r from-slate-950 to-slate-900 px-6 text-[14px] font-medium text-white shadow-[0_10px_30px_rgba(15,23,42,0.18)] transition-all duration-300 hover:shadow-[0_14px_38px_rgba(15,23,42,0.24)] anim-fade-up" href="#request-access" style="transition-delay: 0.45s;">
+<span class="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.20),transparent_28%)] opacity-90"></span>
+<span class="relative z-10 inline-flex items-center gap-2">
+                Explore components
+                <iconify-icon class="transition-transform duration-300 group-hover:translate-x-0.5" height="16" icon="solar:arrow-right-linear" width="16"></iconify-icon>
+</span>
+</a>
+<a class="group relative inline-flex h-12 items-center justify-center overflow-hidden rounded-full border border-slate-300/80 bg-white/58 backdrop-blur-xl px-6 text-[14px] font-medium text-slate-800 shadow-[0_6px_22px_rgba(148,163,184,0.10)] transition-all duration-300 hover:bg-white/72 hover:shadow-[0_10px_28px_rgba(148,163,184,0.16)] anim-fade-up" href="#methodology" style="transition-delay: 0.55s;">
+<span class="pointer-events-none absolute inset-0 rounded-full bg-[linear-gradient(135deg,rgba(255,255,255,0.65),transparent_55%)]"></span>
+<span class="relative z-10 inline-flex items-center gap-2">
+                View documentation
+              </span>
+</a>
+</div>
+<!-- Metrics module -->
+<div class="glass-panel relative max-w-4xl rounded-[28px] px-5 py-5 sm:px-6 sm:py-6 shadow-[0_24px_70px_rgba(148,163,184,0.12)] anim-fade-up" style="transition-delay: 0.65s;">
+<div class="pointer-events-none absolute inset-0 rounded-[28px] overflow-hidden">
+<div class="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.52),rgba(255,255,255,0.12)_28%,transparent_55%)]"></div>
+<div class="absolute inset-x-0 top-0 h-20 bg-[linear-gradient(180deg,rgba(255,255,255,0.35),transparent)]"></div>
+<div class="absolute -top-10 left-10 w-40 h-40 rounded-full bg-white/20 blur-3xl"></div>
+</div>
+<div class="corner-tl"></div>
+<div class="corner-tr"></div>
+<div class="corner-bl"></div>
+<div class="corner-br"></div>
+<div class="relative z-10 flex items-center justify-between gap-4 pb-4 mb-5 border-b border-white/45">
+<div class="flex items-center gap-3">
+<span class="font-mono text-[11px] uppercase tracking-[0.22em] text-slate-700">
+                  System Snapshot
+                </span>
+</div>
+<span class="inline-flex items-center gap-2 rounded-full bg-emerald-50/85 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-emerald-700 border border-emerald-200/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                Live Sync
+              </span>
+</div>
+<div class="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-0 md:divide-x md:divide-white/35">
+<div class="px-2 md:px-5 anim-fade-up" style="transition-delay: 0.75s;">
+<div class="font-display text-[2rem] sm:text-[2.2rem] leading-none tracking-[-0.04em] text-slate-950 mb-2">
+                  186
+                </div>
+<div class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-700 mb-2">
+                  Monitored Regions
+                </div>
+<p class="text-sm leading-relaxed text-slate-800/90">
+                  Synchronized geographic zones under active atmospheric
+                  observation.
+                </p>
+</div>
+<div class="px-2 md:px-5 anim-fade-up" style="transition-delay: 0.85s;">
+<div class="font-display text-[2rem] sm:text-[2.2rem] leading-none tracking-[-0.04em] text-slate-950 mb-2">
+                  24/7
+                </div>
+<div class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-700 mb-2">
+                  Live Signal Refresh
+                </div>
+<p class="text-sm leading-relaxed text-slate-800/90">
+                  Continuous updates across pollutant movement, density shifts,
+                  and exposure signals.
+                </p>
+</div>
+<div class="px-2 md:px-5 anim-fade-up" style="transition-delay: 0.95s;">
+<div class="font-display text-[2rem] sm:text-[2.2rem] leading-none tracking-[-0.04em] text-slate-950 mb-2">
+                  9.2M
+                </div>
+<div class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-700 mb-2">
+                  Data Points Daily
+                </div>
+<p class="text-sm leading-relaxed text-slate-800/90">
+                  Environmental streams processed into a unified live
+                  observatory layer.
+                </p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section id="typography" class="relative py-24 lg:py-28 px-6 md:px-8 lg:px-12 border-b border-slate-200/50 bg-[#EEF4FA]">
+<div class="max-w-[760px] mx-auto text-center mb-16 anim-trigger">
+<h2 class="font-display text-[2.35rem] sm:text-[2.9rem] lg:text-[3.45rem] leading-[1.02] tracking-[-0.04em] text-slate-950 font-light anim-fade-up">1. Typography</h2>
+</div>
+<div class="max-w-6xl mx-auto space-y-8 flex flex-col gap-4">
+    <!-- Heading 1 -->
+    <div class="flex items-center justify-between border-b border-slate-200/50 pb-6 w-full">
+        <div class="flex flex-col gap-2 w-3/4">
+            <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Heading 1</span>
+            <div class="font-display text-[3.3rem] sm:text-[4.4rem] lg:text-[5.5rem] leading-[0.98] tracking-[-0.045em] text-slate-950 font-light">Hero Display</div>
+        </div>
+        <div class="w-1/4 text-right">
+            <span class="font-mono text-[12px] text-slate-500">88px / 86px</span>
+        </div>
+    </div>
+    <!-- Heading 2 -->
+    <div class="flex items-center justify-between border-b border-slate-200/50 pb-6 w-full">
+        <div class="flex flex-col gap-2 w-3/4">
+            <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Heading 2</span>
+            <div class="font-display text-[2.35rem] sm:text-[2.9rem] lg:text-[3.45rem] leading-[1.02] tracking-[-0.04em] text-slate-950 font-light">Section Header</div>
+        </div>
+        <div class="w-1/4 text-right">
+            <span class="font-mono text-[12px] text-slate-500">55px / 56px</span>
+        </div>
+    </div>
+    <!-- Heading 3 -->
+    <div class="flex items-center justify-between border-b border-slate-200/50 pb-6 w-full">
+        <div class="flex flex-col gap-2 w-3/4">
+            <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Heading 3</span>
+            <div class="font-display text-[1.4rem] lg:text-[1.55rem] tracking-[-0.03em] text-slate-950 font-medium">Global atmospheric state</div>
+        </div>
+        <div class="w-1/4 text-right">
+            <span class="font-mono text-[12px] text-slate-500">24px / 26px</span>
+        </div>
+    </div>
+    <!-- Heading 4 -->
+    <div class="flex items-center justify-between border-b border-slate-200/50 pb-6 w-full">
+        <div class="flex flex-col gap-2 w-3/4">
+            <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Heading 4</span>
+            <div class="font-display text-[2rem] sm:text-[2.35rem] text-slate-950 font-medium tracking-[-0.03em]">Platform Access</div>
+        </div>
+        <div class="w-1/4 text-right">
+            <span class="font-mono text-[12px] text-slate-500">37px / 39px</span>
+        </div>
+    </div>
+    <!-- Bold L/M/S (equivalent components found) -->
+    <div class="flex items-center justify-between border-b border-slate-200/50 pb-6 w-full">
+        <div class="flex flex-col gap-2 w-3/4">
+            <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Eyebrow Mono</span>
+            <div class="font-mono text-[11px] uppercase tracking-[0.22em] text-blue-700">Live Observatory • Atmospheric Monitoring</div>
+        </div>
+        <div class="w-1/4 text-right">
+            <span class="font-mono text-[12px] text-slate-500">11px</span>
+        </div>
+    </div>
+    <div class="flex items-center justify-between border-b border-slate-200/50 pb-6 w-full">
+        <div class="flex flex-col gap-2 w-3/4">
+            <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Brand Bold</span>
+            <div class="text-sm sm:text-[15px] font-medium tracking-tight text-slate-900">GAQO</div>
+        </div>
+        <div class="w-1/4 text-right">
+            <span class="font-mono text-[12px] text-slate-500">15px</span>
+        </div>
+    </div>
+    <!-- Paragraph Large -->
+    <div class="flex items-center justify-between border-b border-slate-200/50 pb-6 w-full">
+        <div class="flex flex-col gap-2 w-3/4">
+            <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Paragraph Large</span>
+            <div class="text-[1.05rem] sm:text-[1.15rem] lg:text-[1.2rem] leading-[1.7] text-slate-700/88 font-normal">Track pollutant movement, regional exposure, and atmospheric change through a live observational layer built for environmental intelligence.</div>
+        </div>
+        <div class="w-1/4 text-right">
+            <span class="font-mono text-[12px] text-slate-500">19px / 32px</span>
+        </div>
+    </div>
+    <!-- Paragraph Regular -->
+    <div class="flex items-center justify-between border-b border-slate-200/50 pb-6 w-full">
+        <div class="flex flex-col gap-2 w-3/4">
+            <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Paragraph M</span>
+            <div class="text-[1rem] sm:text-[1.06rem] leading-[1.75] text-slate-600">The observatory transforms fragmented atmospheric inputs into a unified operational view that can be monitored, interpreted, and acted on.</div>
+        </div>
+        <div class="w-1/4 text-right">
+            <span class="font-mono text-[12px] text-slate-500">17px / 29px</span>
+        </div>
+    </div>
+    <!-- Paragraph Small -->
+    <div class="flex items-center justify-between w-full">
+        <div class="flex flex-col gap-2 w-3/4">
+            <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">Paragraph S</span>
+            <div class="text-[0.98rem] leading-[1.7] text-slate-700">Track PM2.5 and PM10 concentrations across active regions with density shifts and historical comparison layers.</div>
+        </div>
+        <div class="w-1/4 text-right">
+            <span class="font-mono text-[12px] text-slate-500">15px / 25px</span>
+        </div>
+    </div>
+</div>
+</section>
+
+<section id="colors" class="relative py-24 lg:py-28 px-6 md:px-8 lg:px-12 border-b border-slate-200/50 bg-[#f8fafc]">
+<div class="max-w-[760px] mx-auto text-center mb-16 anim-trigger">
+<h2 class="font-display text-[2.35rem] sm:text-[2.9rem] lg:text-[3.45rem] leading-[1.02] tracking-[-0.04em] text-slate-950 font-light anim-fade-up">2. Colors & Surfaces</h2>
+</div>
+<div class="max-w-7xl mx-auto flex flex-col gap-12">
+    <!-- Backgrounds -->
+    <div>
+        <h3 class="font-display text-[1.4rem] tracking-[-0.03em] text-slate-950 font-medium mb-6">Backgrounds</h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div class="flex flex-col gap-3">
+                <div class="h-24 w-full rounded-2xl bg-slate-950 border border-slate-800 shadow-[0_24px_70px_rgba(15,23,42,0.18)]"></div>
+                <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">bg-slate-950</span>
+            </div>
+            <div class="flex flex-col gap-3">
+                <div class="h-24 w-full rounded-2xl bg-[#EEF4FA] border border-blue-200/50"></div>
+                <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">bg-[#EEF4FA]</span>
+            </div>
+            <div class="flex flex-col gap-3">
+                <div class="h-24 w-full rounded-2xl bg-[#EAF2F8] border border-blue-200/50"></div>
+                <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">bg-[#EAF2F8]</span>
+            </div>
+            <div class="flex flex-col gap-3">
+                <div class="h-24 w-full rounded-2xl bg-white/60 backdrop-blur-xl border border-white/60 shadow-[0_6px_24px_rgba(148,163,184,0.10)] relative overflow-hidden">
+                    <img class="absolute inset-0 w-full h-full object-cover mix-blend-multiply opacity-20" src="assets/c0e5cd86-3d23-4068-befd-b05819_6beff4d0db7a.jpg">
+                    <div class="absolute inset-0 bg-white/60 backdrop-blur-xl"></div>
+                </div>
+                <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">bg-white/60 backdrop-blur-xl</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Surfaces & Glass -->
+    <div>
+        <h3 class="font-display text-[1.4rem] tracking-[-0.03em] text-slate-950 font-medium mb-6">Surfaces & Glass</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 relative p-12 rounded-[28px] bg-sky-100/50 overflow-hidden">
+            <div class="absolute inset-0 z-0">
+                <img class="w-full h-full object-cover" src="assets/c0e5cd86-3d23-4068-befd-b05819_6beff4d0db7a.jpg"/>
+            </div>
+            <!-- Glass panel 1 -->
+            <div class="relative z-10 glass-panel max-w-full rounded-[28px] px-5 py-5 sm:px-6 sm:py-6 shadow-[0_24px_70px_rgba(148,163,184,0.12)]">
+                <div class="pointer-events-none absolute inset-0 rounded-[28px] overflow-hidden">
+                    <div class="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.52),rgba(255,255,255,0.12)_28%,transparent_55%)]"></div>
+                    <div class="absolute inset-x-0 top-0 h-20 bg-[linear-gradient(180deg,rgba(255,255,255,0.35),transparent)]"></div>
+                    <div class="absolute -top-10 left-10 w-40 h-40 rounded-full bg-white/20 blur-3xl"></div>
+                </div>
+                <div class="corner-tl"></div><div class="corner-tr"></div><div class="corner-bl"></div><div class="corner-br"></div>
+                <div class="relative z-10 p-4 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-700">glass-panel class overlay</div>
+            </div>
+            
+            <!-- Glass panel 2 -->
+            <div class="relative z-10 h-full rounded-[28px] overflow-hidden bg-white/40 backdrop-blur-xl border border-white/55 shadow-[0_26px_70px_rgba(148,163,184,0.14),0_8px_24px_rgba(15,23,42,0.05)]">
+                <div class="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,255,255,0.52))]"></div>
+                <div class="absolute inset-0 pointer-events-none">
+                    <div class="absolute inset-0 bg-[radial-gradient(circle_at_35%_30%,rgba(147,197,253,0.22),transparent_28%),radial-gradient(circle_at_70%_65%,rgba(59,130,246,0.14),transparent_32%)]"></div>
+                    <div class="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.42),transparent_48%)]"></div>
+                </div>
+                <div class="relative z-10 p-10 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">bg-white/40 backdrop-blur-xl border-white/55</div>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+<section id="components" class="relative py-24 lg:py-28 px-6 md:px-8 lg:px-12 border-b border-slate-200/50 bg-[#EAF2F8]">
+<div class="max-w-[760px] mx-auto text-center mb-16 anim-trigger">
+<h2 class="font-display text-[2.35rem] sm:text-[2.9rem] lg:text-[3.45rem] leading-[1.02] tracking-[-0.04em] text-slate-950 font-light anim-fade-up">3. UI Components</h2>
+</div>
+<div class="max-w-7xl mx-auto">
+    <!-- Buttons -->
+    <h3 class="font-display text-[1.4rem] tracking-[-0.03em] text-slate-950 font-medium mb-6">Buttons & Inputs</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-12 bg-white/34 backdrop-blur-2xl border border-white/60 p-12 rounded-[30px] shadow-[0_28px_80px_rgba(148,163,184,0.14)]">
+        <div class="flex flex-col gap-8">
+            <!-- Primary Dark Example -->
+            <div>
+                <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500 block mb-4">Primary Dark Button</span>
+                <button class="group relative inline-flex h-12 items-center justify-center overflow-hidden rounded-full border border-blue-200/70 bg-gradient-to-r from-slate-950 to-slate-900 px-6 text-[14px] font-medium text-white shadow-[0_10px_30px_rgba(15,23,42,0.18)] transition-all duration-300 hover:shadow-[0_14px_38px_rgba(15,23,42,0.24)]">
+                    <span class="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.20),transparent_28%)] opacity-90"></span>
+                    <span class="relative z-10 inline-flex items-center gap-2">
+                        Explore live system
+                        <iconify-icon class="transition-transform duration-300 group-hover:translate-x-0.5" height="16" icon="solar:arrow-right-linear" width="16"></iconify-icon>
+                    </span>
+                </button>
+            </div>
+            <!-- Secondary Glass -->
+            <div>
+                <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500 block mb-4">Secondary Glass</span>
+                <button class="group relative inline-flex h-12 items-center justify-center overflow-hidden rounded-full border border-slate-300/80 bg-white/58 backdrop-blur-xl px-6 text-[14px] font-medium text-slate-800 shadow-[0_6px_22px_rgba(148,163,184,0.10)] transition-all duration-300 hover:bg-white/72 hover:shadow-[0_10px_28px_rgba(148,163,184,0.16)]">
+                    <span class="pointer-events-none absolute inset-0 rounded-full bg-[linear-gradient(135deg,rgba(255,255,255,0.65),transparent_55%)]"></span>
+                    <span class="relative z-10 inline-flex items-center gap-2">
+                        View methodology
+                    </span>
+                </button>
+            </div>
+            <!-- Ghost Nav -->
+            <div>
+                <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500 block mb-4">Ghost / Nav</span>
+                <button class="px-3.5 py-2 rounded-full text-[13px] font-medium text-slate-600 hover:text-slate-900 hover:bg-white/70 transition">
+                    System View
+                </button>
+            </div>
+        </div>
+        
+        <div class="flex flex-col gap-8">
+            <!-- Badges -->
+            <div>
+                <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500 block mb-4">Badges</span>
+                <div class="inline-flex items-center gap-2 rounded-full border border-blue-200/70 bg-white/60 backdrop-blur-xl px-4 py-2 shadow-[0_6px_24px_rgba(148,163,184,0.10)] mr-2">
+                    <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                    <span class="font-mono text-[11px] uppercase tracking-[0.22em] text-blue-700">Observed Layers</span>
+                </div>
+                <div class="inline-flex items-center gap-2 rounded-full bg-emerald-50/85 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-emerald-700 border border-emerald-200/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> Live Sync
+                </div>
+            </div>
+            
+            <!-- Inputs -->
+            <div>
+                <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500 block mb-4">Input</span>
+                <div class="max-w-sm">
+                    <input class="w-full bg-transparent border-b border-slate-300 focus:border-blue-400 outline-none py-3 text-sm text-slate-900 placeholder-slate-500" placeholder="Organization *" type="text"/>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+<section id="layout" class="relative py-24 lg:py-28 px-6 md:px-8 lg:px-12 border-b border-slate-200/50 bg-[#EEF4FA]">
+<div class="max-w-[760px] mx-auto text-center mb-16 anim-trigger">
+<h2 class="font-display text-[2.35rem] sm:text-[2.9rem] lg:text-[3.45rem] leading-[1.02] tracking-[-0.04em] text-slate-950 font-light anim-fade-up">4. Layout Patterns</h2>
+</div>
+<div class="max-w-7xl mx-auto space-y-16">
+    <!-- Grid 3 columns -->
+    <div>
+        <h3 class="font-display text-[1.4rem] tracking-[-0.03em] text-slate-950 font-medium mb-6">Grid: 3 Columns</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-7 items-stretch">
+            <div class="min-h-[250px] rounded-[28px] overflow-hidden bg-white/40 backdrop-blur-xl border border-white/55 flex items-center justify-center font-mono text-slate-500 text-xs">col 1</div>
+            <div class="min-h-[250px] rounded-[28px] overflow-hidden bg-white/40 backdrop-blur-xl border border-white/55 flex items-center justify-center font-mono text-slate-500 text-xs">col 2</div>
+            <div class="min-h-[250px] rounded-[28px] overflow-hidden bg-white/40 backdrop-blur-xl border border-white/55 flex items-center justify-center font-mono text-slate-500 text-xs">col 3</div>
+        </div>
+    </div>
+    
+    <!-- Grid 1.2 : 1 split -->
+    <div>
+        <h3 class="font-display text-[1.4rem] tracking-[-0.03em] text-slate-950 font-medium mb-6">Split: 1.2fr : 1fr</h3>
+        <div class="grid grid-cols-1 md:grid-cols-[1.2fr_1fr] gap-8 md:gap-16 pb-8">
+            <div class="min-h-[150px] rounded-[28px] overflow-hidden bg-white/40 backdrop-blur-xl border border-white/55 flex items-center justify-center font-mono text-slate-500 text-xs">md:grid-cols-[1.2fr_1fr]</div>
+            <div class="min-h-[150px] rounded-[28px] overflow-hidden bg-white/40 backdrop-blur-xl border border-white/55 flex items-center justify-center font-mono text-slate-500 text-xs">max-w-[40ch]</div>
+        </div>
+    </div>
+</div>
+</section>
+
+<section id="motion" class="relative py-24 lg:py-28 px-6 md:px-8 lg:px-12 border-b border-slate-200/50 bg-[#EAF2F8]">
+<div class="max-w-[760px] mx-auto text-center mb-16 anim-trigger">
+<h2 class="font-display text-[2.35rem] sm:text-[2.9rem] lg:text-[3.45rem] leading-[1.02] tracking-[-0.04em] text-slate-950 font-light anim-fade-up">5. Motion & Interaction</h2>
+</div>
+<div class="max-w-7xl mx-auto">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 anim-trigger">
+        <!-- Scale hover -->
+        <div class="group relative min-h-[320px] rounded-[28px] overflow-hidden bg-white/40 backdrop-blur-xl border border-white/55 shadow-[0_26px_70px_rgba(148,163,184,0.14)] cursor-pointer">
+            <img class="absolute inset-0 w-full h-full object-cover opacity-[0.48] mix-blend-multiply transition-transform duration-700 group-hover:scale-105" src="assets/aad8a2f0-bbfc-49f3-82c6-8c685a_7c95b1dff8ef.jpg"/>
+            <div class="absolute inset-0 flex items-center justify-center bg-white/20 backdrop-blur-[2px]">
+                <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-800 bg-white/80 px-4 py-2 rounded-full backdrop-blur-xl">Hover me (Scale)</span>
+            </div>
+        </div>
+        
+        <!-- Pulse -->
+        <div class="relative min-h-[320px] rounded-[28px] flex items-center justify-center bg-white/34 backdrop-blur-xl border border-white/55">
+            <div class="flex items-center gap-3">
+                <div class="relative w-12 h-12 flex items-center justify-center">
+                    <div class="absolute inset-0 bg-blue-500/15 rounded-full animate-pulse"></div>
+                    <div class="w-4 h-4 bg-blue-500 rounded-full relative z-10 shadow-[0_0_10px_rgba(59,130,246,0.6)]"></div>
+                </div>
+                <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-slate-500">animate-pulse</span>
+            </div>
+        </div>
+        
+        <!-- Spin and radar effects -->
+        <div class="relative min-h-[320px] rounded-[28px] flex items-center justify-center bg-slate-950 border border-white/20 overflow-hidden">
+            <div class="relative w-36 h-36">
+                <div class="absolute inset-[36%] border border-slate-300/45 rounded-full"></div>
+                <div class="absolute inset-[54%] border border-blue-300/40 rounded-full bg-blue-100/20"></div>
+                <div class="absolute left-0 right-0 top-1/2 h-px bg-slate-300/30 -translate-y-1/2"></div>
+                <div class="absolute inset-0 rounded-full border-r border-blue-400/55 animate-[spin_3.5s_linear_infinite]" style="background: conic-gradient(from 0deg, transparent 62%, rgba(59,130,246,0.12) 100%); mix-blend-mode: screen;"></div>
+            </div>
+            <div class="absolute bottom-6 font-mono text-[11px] uppercase tracking-[0.18em] text-slate-300">animate-[spin] radar</div>
+        </div>
+    </div>
+</div>
+</section>
+
+<section id="icons" class="relative py-24 lg:py-28 px-6 md:px-8 lg:px-12 bg-[#EEF4FA]">
+<div class="max-w-[760px] mx-auto text-center mb-16 anim-trigger">
+<h2 class="font-display text-[2.35rem] sm:text-[2.9rem] lg:text-[3.45rem] leading-[1.02] tracking-[-0.04em] text-slate-950 font-light anim-fade-up">6. Icons</h2>
+</div>
+<div class="max-w-3xl mx-auto flex flex-wrap gap-8 justify-center">
+    <!-- Iconify -->
+    <div class="flex flex-col items-center gap-3">
+        <div class="w-16 h-16 rounded-[16px] bg-white border border-white/60 shadow-sm flex items-center justify-center">
+            <iconify-icon class="text-blue-500 text-2xl" icon="solar:radar-linear"></iconify-icon>
+        </div>
+        <span class="font-mono text-[10px] text-slate-500">solar:radar-linear</span>
+    </div>
+    <div class="flex flex-col items-center gap-3">
+        <div class="w-16 h-16 rounded-[16px] bg-white border border-white/60 shadow-sm flex items-center justify-center">
+            <iconify-icon class="text-blue-500 text-2xl" icon="solar:wind-linear"></iconify-icon>
+        </div>
+        <span class="font-mono text-[10px] text-slate-500">solar:wind-linear</span>
+    </div>
+    <div class="flex flex-col items-center gap-3">
+        <div class="w-16 h-16 rounded-[16px] bg-white border border-white/60 shadow-sm flex items-center justify-center">
+            <iconify-icon class="text-blue-500 text-2xl" icon="solar:global-linear"></iconify-icon>
+        </div>
+        <span class="font-mono text-[10px] text-slate-500">solar:global-linear</span>
+    </div>
+    <div class="flex flex-col items-center gap-3">
+        <div class="w-16 h-16 rounded-[16px] bg-white border border-white/60 shadow-sm flex items-center justify-center">
+            <iconify-icon class="text-emerald-500 text-2xl" icon="solar:shield-check-linear"></iconify-icon>
+        </div>
+        <span class="font-mono text-[10px] text-slate-500">solar:shield-check-linear</span>
+    </div>
+    <div class="flex flex-col items-center gap-3">
+        <div class="w-16 h-16 rounded-[16px] bg-white border border-white/60 shadow-sm flex items-center justify-center">
+            <iconify-icon class="text-amber-500 text-2xl" icon="solar:danger-triangle-linear"></iconify-icon>
+        </div>
+        <span class="font-mono text-[10px] text-slate-500">solar:danger-triangle-linear</span>
+    </div>
+</div>
+</section>
+</main>
+<script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const observerOptions = { root: null, rootMargin: '0px', threshold: 0.15 };
+    const observer = new IntersectionObserver((entries, observer) => {
+    entries.forEach(entry => {
+    if (entry.isIntersecting) {
+    entry.target.classList.add('is-visible');
+    observer.unobserve(entry.target);
+    }
+    });
+    }, observerOptions);
+    document.querySelectorAll('.anim-trigger').forEach(el => observer.observe(el));
+});
+</script>
+</body></html>
