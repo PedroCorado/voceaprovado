@@ -4,8 +4,62 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sturio.io | Grupos de Estudo VIP no WhatsApp</title>
+    <link rel="canonical" href="https://www.voceaprovado.online" />
+    <link rel="shortcut icon" href="https://www.voceaprovado.online/assets/favicon.ico" type="image/x-icon">
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Sturio.io",
+      "url": "https://www.voceaprovado.online/",
+      "description": "Grupos de WhatsApp VIP para estudantes de concursos públicos.",
+      "publisher": {
+        "@type": "Organization",
+        "name": "Sturio.io",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://www.voceaprovado.online/assets/logo.png"
+        }
+      }
+    }
+    </script>
     <!-- SEO Meta Tags -->
-    <meta name="description" content="Acelere seu aprendizado com nossos grupos VIP no WhatsApp. Receba materiais exclusivos e faça simulados gratuitos.">
+    <meta name="description" content="Acelere sua aprovação com os melhores grupos de estudo VIP no WhatsApp. Comunidade focada em concursos policiais, bancários, saúde e tribunais com materiais exclusivos e networking ativo.">
+    <meta name="keywords" content="concursos, grupos de estudo, whatsapp concursos, PCDF, PF, PRF, estudo para concursos, materiais gratuitos, simulados">
+    <meta name="author" content="Sturio.io">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://www.voceaprovado.online/">
+    <meta property="og:title" content="Sturio.io | Grupos de Estudo VIP no WhatsApp">
+    <meta property="og:description" content="Acelere sua aprovação com os melhores grupos de estudo VIP no WhatsApp. Materiais exclusivos, networking e foco total no seu concurso.">
+    <meta property="og:image" content="https://www.voceaprovado.online/assets/og-image.jpg">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://www.voceaprovado.online/">
+    <meta property="twitter:title" content="Sturio.io | Grupos de Estudo VIP no WhatsApp">
+    <meta property="twitter:description" content="Acelere sua aprovação com os melhores grupos de estudo VIP no WhatsApp. Materiais exclusivos, networking e foco total no seu concurso.">
+    <meta property="twitter:image" content="https://www.voceaprovado.online/assets/og-image.jpg">
+
+    <meta name="robots" content="index, follow">
+
+    <!-- Meta Pixel Code -->
+    <script>
+    !function(f,b,e,v,n,t,s)
+    {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+    n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t,s)}(window, document,'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+    fbq('init', '3847738028864117');
+    fbq('track', 'PageView');
+    </script>
+    <!-- End Meta Pixel Code -->
     
     <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -104,6 +158,10 @@
 </head>
 
 <body class="min-h-screen relative flex flex-col bg-background text-foreground overflow-x-hidden antialiased">
+    <!-- Meta Pixel noscript (placed in body for valid HTML) -->
+    <noscript><img height="1" width="1" style="display:none"
+    src="https://www.facebook.com/tr?id=3847738028864117&ev=PageView&noscript=1"
+    /></noscript>
 
     <!-- Hero Section (Treated as entire page showcase) -->
     <main id="hero-scene" class="relative w-full min-h-[85vh] md:min-h-screen flex items-center justify-center px-4 pt-12 pb-8 md:py-20 overflow-hidden">
@@ -1038,6 +1096,35 @@
             });
         });
 
+        // 5. Facebook Pixel Event Tracking (Marketing Best Practices)
+        document.addEventListener('click', (e) => {
+            const link = e.target.closest('a');
+            if (!link) return;
+
+            const href = link.getAttribute('href');
+            const innerText = link.innerText.trim();
+
+            // Track WhatsApp Group Joins (Conversion Event)
+            if (href && href.includes('chat.whatsapp.com')) {
+                if (typeof fbq !== 'undefined') {
+                    fbq('track', 'Lead', {
+                        content_name: innerText || 'WhatsApp Group Join',
+                        content_category: 'Conversion',
+                        value: 1.0,
+                        currency: 'BRL'
+                    });
+                }
+            }
+
+            // Track CTA Clicks (Pre-Conversion Event)
+            if (href === '#grupos-de-estudo' || href === '#metodologia') {
+                if (typeof fbq !== 'undefined') {
+                    fbq('track', 'Contact', {
+                        content_name: innerText || 'CTA Click'
+                    });
+                }
+            }
+        });
     </script>
 
     <!-- 3D Background - Mobile Optimized -->
